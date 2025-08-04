@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One-Time-Note (OTN)</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 One-Time-Note</h1>
+            <p>Sichere selbstzerstörende Notizen erstellen</p>
+        </header>
+
+        <main>
+            <form id="noteForm" class="note-form">
+                <div class="form-group">
+                    <label for="noteContent">Ihre Nachricht:</label>
+                    <textarea 
+                        id="noteContent" 
+                        name="noteContent" 
+                        placeholder="Geben Sie hier Ihre Nachricht ein..."
+                        required
+                        rows="6"
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="creatorEmail">Ihre E-Mail (optional):</label>
+                    <input 
+                        type="email" 
+                        id="creatorEmail" 
+                        name="creatorEmail" 
+                        placeholder="ihre-email@beispiel.de"
+                    >
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="isOneTime" name="isOneTime">
+                        <span class="checkmark"></span>
+                        OTN (Notiz nach einmaligem Ansehen löschen)
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="expirationTime">Speicherdauer:</label>
+                    <select id="expirationTime" name="expirationTime">
+                        <option value="5">5 Minuten</option>
+                        <option value="15">15 Minuten</option>
+                        <option value="30">30 Minuten</option>
+                        <option value="60">1 Stunde</option>
+                        <option value="180">3 Stunden</option>
+                        <option value="360">6 Stunden</option>
+                        <option value="720">12 Stunden</option>
+                        <option value="1440">1 Tag</option>
+                        <option value="4320">3 Tage</option>
+                        <option value="10080">1 Woche</option>
+                        <option value="43200">30 Tage</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">
+                        📝 Notiz erstellen
+                    </button>
+                </div>
+            </form>
+
+            <div id="result" class="result hidden">
+                <h3>✅ Notiz erfolgreich erstellt!</h3>
+                <div class="link-container">
+                    <label>Teilen Sie diesen Link:</label>
+                    <div class="link-box">
+                        <input type="text" id="shareLink" readonly>
+                        <button type="button" id="copyLink" class="btn btn-secondary">📋 Kopieren</button>
+                    </div>
+                </div>
+                <button type="button" id="newNote" class="btn btn-primary">Neue Notiz erstellen</button>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Notiz wird erstellt...</p>
+            </div>
+        </main>
+
+        <footer>
+            <p>🔒 Ihre Nachrichten werden verschlüsselt gespeichert und automatisch gelöscht</p>
+        </footer>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html> 

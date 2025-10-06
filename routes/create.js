@@ -13,19 +13,20 @@ function generateUniqueId() {
     return result;
 }
 
-// Hilfsfunktion: Text verschlüsseln
+// Hilfsfunktion: Text verschlüsseln (AES-256-GCM)
 function encryptText(text) {
-    const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-key-32-chars-long', 'salt', 32);
-    const iv = crypto.randomBytes(16);
-    
-    const cipher = crypto.createCipher(algorithm, key);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    
+    const algorithm = 'aes-256-gcm';
+    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'change-me-32-bytes-minimum-security-key', 'otn-salt', 32);
+    const iv = crypto.randomBytes(12); // 96-bit IV für GCM
+
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+
     return {
-        encrypted: encrypted,
-        iv: iv.toString('hex')
+        encrypted: encrypted.toString('hex'),
+        iv: iv.toString('hex'),
+        tag: authTag.toString('hex')
     };
 }
 
@@ -34,13 +35,35 @@ router.post('/create-note', async (req, res) => {
     try {
         const { noteContent, creatorEmail, isOneTime, expirationTime } = req.body;
 
+        // Strikte Typenvalidierung
+        const isOneTimeBool = Boolean(isOneTime);
+        const allowedExpMinutes = [5,15,30,60,180,360,720,1440,4320,10080,43200];
+
         // Validierung
-        if (!noteContent || noteContent.trim().length === 0) {
+        if (!noteContent || typeof noteContent !== 'string' || noteContent.trim().length === 0) {
             return res.status(400).json({ error: 'Notizinhalt ist erforderlich' });
         }
 
         if (noteContent.length > 10000) {
             return res.status(400).json({ error: 'Notiz ist zu lang (max. 10.000 Zeichen)' });
+        }
+
+        if (creatorEmail && typeof creatorEmail === 'string') {
+            const email = creatorEmail.trim();
+            if (email.length > 255) {
+                return res.status(400).json({ error: 'E-Mail ist zu lang (max. 255 Zeichen)' });
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (email.length > 0 && !emailRegex.test(email)) {
+                return res.status(400).json({ error: 'Ungültige E-Mail-Adresse' });
+            }
+        }
+
+        if (!isOneTimeBool) {
+            const expInt = parseInt(expirationTime, 10);
+            if (!allowedExpMinutes.includes(expInt)) {
+                return res.status(400).json({ error: 'Ungültige Speicherdauer' });
+            }
         }
 
         // Unique ID generieren (mit Duplikat-Prüfung)
@@ -70,20 +93,22 @@ router.post('/create-note', async (req, res) => {
 
         // Ablaufdatum berechnen
         let expiresAt = null;
-        if (!isOneTime) {
+        if (!isOneTimeBool) {
             const now = new Date();
-            expiresAt = new Date(now.getTime() + (expirationTime * 60 * 1000)); // Minuten zu Millisekunden
+            const expInt = parseInt(expirationTime, 10);
+            expiresAt = new Date(now.getTime() + (expInt * 60 * 1000)); // Minuten zu Millisekunden
         }
 
         // In Datenbank speichern
         const [result] = await pool.execute(
             `INSERT INTO notes (unique_id, note_content, creator_email, expires_at, is_one_time) 
              VALUES (?, ?, ?, ?, ?)`,
-            [uniqueId, encryptedContent, creatorEmail || null, expiresAt, isOneTime]
+            [uniqueId, encryptedContent, creatorEmail || null, expiresAt, isOneTimeBool]
         );
 
-        // Link generieren
-        const link = `${req.protocol}://${req.get('host')}/note/${uniqueId}`;
+        // Link generieren - bevorzugt BASE_URL aus .env
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        const link = `${baseUrl}/note/${uniqueId}`;
 
         console.log(`✅ Notiz erstellt: ${uniqueId} (OTN: ${isOneTime})`);
 

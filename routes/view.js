@@ -3,22 +3,35 @@ const crypto = require('crypto');
 const router = express.Router();
 const { pool } = require('../database');
 
-// Hilfsfunktion: Text entschlüsseln
+// Hilfsfunktion: Text entschlüsseln (AES-256-GCM)
 function decryptText(encryptedData) {
     try {
         const data = JSON.parse(encryptedData);
-        const algorithm = 'aes-256-cbc';
-        const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-key-32-chars-long', 'salt', 32);
-        
-        const decipher = crypto.createDecipher(algorithm, key);
-        let decrypted = decipher.update(data.encrypted, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        
+        const algorithm = 'aes-256-gcm';
+        const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'change-me-32-bytes-minimum-security-key', 'otn-salt', 32);
+
+        const iv = Buffer.from(data.iv, 'hex');
+        const ciphertext = Buffer.from(data.encrypted, 'hex');
+        const authTag = Buffer.from(data.tag, 'hex');
+
+        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        decipher.setAuthTag(authTag);
+        const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
         return decrypted;
     } catch (error) {
         console.error('Entschlüsselungsfehler:', error);
         throw new Error('Fehler beim Entschlüsseln der Notiz');
     }
+}
+
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // Hilfsfunktion: HTML-Template für Notiz-Anzeige
@@ -154,16 +167,16 @@ function generateNoteHTML(note, uniqueId) {
             </div>
             
             ${note.is_one_time ? '<div class="warning">⚠️ Diese Notiz wird nach dem Lesen automatisch gelöscht!</div>' : ''}
-            
-            <div class="note-content">${note.content}</div>
-            
-            ${note.creator_email ? `<div class="creator-info">Von: ${note.creator_email}</div>` : ''}
+
+            <div class="note-content">${escapeHtml(note.content)}</div>
+
+            ${note.creator_email ? `<div class="creator-info">Von: ${escapeHtml(note.creator_email)}</div>` : ''}
             
             <div class="button-group">
-                <button onclick="closeTab()" class="btn btn-primary">
-                    ✅ Gelesen + Tab schließen
+                <button id="closeTabBtn" class="btn btn-primary">
+                    ✅ Gelesen + Zur Startseite
                 </button>
-                <button onclick="deleteNote()" class="btn btn-danger">
+                <button id="deleteNoteBtn" class="btn btn-danger">
                     🗑️ Notiz jetzt löschen
                 </button>
             </div>
@@ -172,12 +185,13 @@ function generateNoteHTML(note, uniqueId) {
     
     <script>
         function closeTab() {
-            window.close();
+            // Navigate back to homepage instead of closing tab
+            window.location.href = '/';
         }
-        
+
         function deleteNote() {
             if (confirm('Sind Sie sicher, dass Sie diese Notiz sofort löschen möchten?')) {
-                fetch('/delete-note/${uniqueId}', {
+                fetch('/delete-note/' + uniqueId, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -198,6 +212,23 @@ function generateNoteHTML(note, uniqueId) {
                 });
             }
         }
+
+        // Set uniqueId for JavaScript (fallback for template interpolation issues)
+        const uniqueId = '${uniqueId}';
+
+        // Event listeners für Buttons hinzufügen
+        document.addEventListener('DOMContentLoaded', function() {
+            const closeBtn = document.getElementById('closeTabBtn');
+            const deleteBtn = document.getElementById('deleteNoteBtn');
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeTab);
+            }
+
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', deleteNote);
+            }
+        });
     </script>
 </body>
 </html>`;
@@ -281,4 +312,4 @@ router.get('/note/:uniqueId', async (req, res) => {
     }
 });
 
-module.exports = router; 
+module.exports = router;
